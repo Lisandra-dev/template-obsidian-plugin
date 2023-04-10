@@ -6,7 +6,7 @@ on:
     tags:
       - "*"
 env:
-  PLUGIN_NAME: template-obsidian-plugin # Change this to match the id of your plugin.
+  PLUGIN_NAME: plugin-id
 
 permissions:
   contents: write
@@ -27,7 +27,17 @@ jobs:
           npm install
           npm run build
           mkdir ${{ env.PLUGIN_NAME }}
-          cp main.js styles.css ${{ env.PLUGIN_NAME }}
+          cp main.js ${{ env.PLUGIN_NAME }}
+      - name: check if style.css exists
+        id: check
+        run: |
+          if [ -f "styles.css" ]; then
+            cp styles.css ${{ env.PLUGIN_NAME }}
+            echo "styles=true" >> $GITHUB_OUTPUT
+          else
+            echo "styles.css does not exist"
+            echo "styles=false" >> $GITHUB_OUTPUT
+          fi
       - name: Copy files
         run: cp manifest.json ${{ env.PLUGIN_NAME }}
       - name: Create zip
@@ -37,8 +47,8 @@ jobs:
           echo "tag_name=$(git tag --sort version:refname | tail -n 1)" >> $GITHUB_OUTPUT
       - name: Create changelog
         run: npx rexreplace "^.*?#+\s\[.*?\n.*?(?=\s*#+\s\[)" "_" -s -M -G -m -o "CHANGELOG.md" > CHANGELOG-LATEST.md
-      - name: Create Release
-        id: create_release
+      - name: Create Release with css
+        if: steps.check.outputs.styles == 'true'
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -55,3 +65,20 @@ jobs:
             main.js
             manifest.json
             styles.css
+      - name: Create Release without css
+        if: steps.check.outputs.styles == 'false'
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: CHANGELOG-LATEST.md
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            ${{ env.PLUGIN_NAME }}.zip
+            main.js
+            manifest.json
